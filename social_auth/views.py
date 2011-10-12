@@ -16,6 +16,10 @@ DEFAULT_REDIRECT = getattr(settings, 'SOCIAL_AUTH_LOGIN_REDIRECT_URL', '') or \
 NEW_USER_REDIRECT = getattr(settings, 'SOCIAL_AUTH_NEW_USER_REDIRECT_URL', '')
 SOCIAL_AUTH_LAST_LOGIN = getattr(settings, 'SOCIAL_AUTH_LAST_LOGIN',
                                  'social_auth_last_login_backend')
+ERROR_REDIRECT_FIELD_NAME = 'error_next'
+
+ERROR_DEFAULT_REDIRECT = getattr(settings, 'LOGIN_ERROR_URL', '')
+
 
 
 def auth(request, backend):
@@ -69,7 +73,9 @@ def complete_process(request, backend):
         # store last login backend name in session
         request.session[SOCIAL_AUTH_LAST_LOGIN] = social_user.provider
     else:
-        url = getattr(settings, 'LOGIN_ERROR_URL', settings.LOGIN_URL)
+        url = request.session.pop(ERROR_REDIRECT_FIELD_NAME, None)
+        if not url:
+            url = getattr(settings, 'LOGIN_ERROR_URL', settings.LOGIN_URL)
     return HttpResponseRedirect(url)
 
 
@@ -112,7 +118,11 @@ def auth_process(request, backend, complete_url_name):
     # Check and sanitize a user-defined GET/POST redirect_to field value.
     redirect = sanitize_redirect(request.get_host(),
                                  request.REQUEST.get(REDIRECT_FIELD_NAME))
+    error_redirect = sanitize_redirect(request.get_host(),
+                                 request.REQUEST.get(ERROR_REDIRECT_FIELD_NAME))
     request.session[REDIRECT_FIELD_NAME] = redirect or DEFAULT_REDIRECT
+    request.session[ERROR_REDIRECT_FIELD_NAME] = error_redirect or ERROR_DEFAULT_REDIRECT
+    
     if backend.uses_redirect:
         return HttpResponseRedirect(backend.auth_url())
     else:

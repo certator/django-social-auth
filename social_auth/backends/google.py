@@ -67,12 +67,30 @@ class GoogleOAuth2Backend(GoogleOAuthBackend):
     EXTRA_DATA = [('refresh_token', 'refresh_token'),
                   ('expires_in', EXPIRES_NAME)]
 
+from acid.utils import brk
 
 class GoogleBackend(OpenIDBackend):
     """Google OpenID authentication backend"""
     name = 'google'
 
 
+            
+class GoogleHybridBackend(OpenIDBackend):
+    """Google OpenID authentication backend"""
+    name = 'google-hybrid'
+
+    def extra_data(self, user, uid, response, details):
+        """Return access_token and extra defined names to store in
+        extra_data field"""
+
+        try:
+            from openid.extensions import oauth
+            resp = oauth.OAuthResponse.fromSuccessResponse(response)
+            return {'request_token': resp.request_token, 'scope': resp.scope}
+        except:
+            return {}
+
+   
 # Auth classes
 class GoogleAuth(OpenIdAuth):
     """Google OpenID authentication"""
@@ -82,6 +100,20 @@ class GoogleAuth(OpenIdAuth):
         """Return Google OpenID service url"""
         return GOOGLE_OPENID_URL
 
+class GoogleHybridAuth(GoogleAuth):
+    """Google OpenID authentication"""
+    AUTH_BACKEND = GoogleHybridBackend
+
+    def setup_request(self):
+        from openid.extensions import oauth
+        
+        openid_request = super(GoogleHybridAuth, self).setup_request()
+
+        openid_request.addExtension(oauth.OAuthRequest(
+                    consumer=getattr(settings, 'GOOGLE_CONSUMER_KEY', ''),
+                    scope=" ".join(getattr(settings, 'GOOGLE_OAUTH_EXTRA_SCOPE', ''))))
+
+        return openid_request
 
 class BaseGoogleOAuth(ConsumerBasedOAuth):
     """Base class for Google OAuth mechanism"""
@@ -112,11 +144,15 @@ class GoogleOAuth(BaseGoogleOAuth):
         extra_params = extra_params or {}
         scope = GOOGLE_OAUTH_SCOPE + \
                 getattr(settings, 'GOOGLE_OAUTH_EXTRA_SCOPE', [])
-        extra_params.update({
-            'scope': ' '.join(scope),
-            'xoauth_displayname': getattr(settings, 'GOOGLE_DISPLAY_NAME',
+        xoauth_displayname = getattr(settings, 'GOOGLE_DISPLAY_NAME',
                                           'Social Auth')
+        extra_params.update({
+            'scope': ' '.join(scope)
         })
+        if xoauth_displayname:
+            extra_params.update({
+                'xoauth_displayname': xoauth_displayname
+            })
         return super(GoogleOAuth, self).oauth_request(token, url, extra_params)
 
     def get_key_and_secret(self):
@@ -174,6 +210,7 @@ def googleapis_email(url, params):
 # Backend definition
 BACKENDS = {
     'google': GoogleAuth,
+    'google-hybrid': GoogleHybridAuth,
     'google-oauth': GoogleOAuth,
     'google-oauth2': GoogleOAuth2,
 }
